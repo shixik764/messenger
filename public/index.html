@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Мессенджер</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0e1621;
+    color: #fff;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* Экран входа */
+  .login-screen {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
+  .login-box {
+    background: #17212b;
+    padding: 40px;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    width: 90%;
+    max-width: 400px;
+  }
+  .login-box h1 {
+    text-align: center;
+    margin-bottom: 30px;
+    font-size: 28px;
+  }
+  .login-box input {
+    width: 100%;
+    padding: 14px;
+    border: 1px solid #3a4a5c;
+    border-radius: 10px;
+    background: #242f3d;
+    color: #fff;
+    font-size: 16px;
+    margin-bottom: 15px;
+  }
+  .login-box button {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 10px;
+    transition: transform 0.1s;
+  }
+  .login-box button:hover { transform: scale(1.02); }
+  .login-box button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .login-box .secondary-btn {
+    background: transparent;
+    border: 1px solid #667eea;
+  }
+  .error-msg {
+    color: #ff6b6b;
+    text-align: center;
+    margin-top: 10px;
+    font-size: 14px;
+  }
+  .toggle-mode {
+    text-align: center;
+    margin-top: 15px;
+    color: #8b9cb0;
+    font-size: 14px;
+  }
+  .toggle-mode a {
+    color: #667eea;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  /* Основной интерфейс */
+  .app { display: none; height: 100vh; flex-direction: column; }
+  .app.active { display: flex; }
+
+  .header {
+    background: #17212b;
+    padding: 12px 20px;
+    border-bottom: 1px solid #0e1621;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .header h2 { font-size: 18px; }
+  .my-name { color: #667eea; font-weight: 600; }
+  .header-btn {
+    background: transparent;
+    border: 1px solid #3a4a5c;
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    margin-left: 8px;
+  }
+  .header-btn:hover { background: #202b36; }
+  .header-btn.danger { border-color: #ff4444; color: #ff4444; }
+  .header-btn.danger:hover { background: #ff4444; color: #fff; }
+
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  .sidebar {
+    width: 300px;
+    background: #17212b;
+    border-right: 1px solid #0e1621;
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar-header {
+    padding: 16px;
+    border-bottom: 1px solid #0e1621;
+    font-weight: 600;
+    font-size: 14px;
+    color: #8b9cb0;
+  }
+  .users-list { flex: 1; overflow-y: auto; }
+  .user-item {
+    padding: 14px 16px;
+    cursor: pointer;
+    border-bottom: 1px solid #0e1621;
+    transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .user-item:hover { background: #202b36; }
+  .user-item.active { background: #2b5278; }
+  .user-avatar {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600; font-size: 16px;
+  }
+  .user-info { flex: 1; }
+  .user-name { font-weight: 500; margin-bottom: 2px; }
+  .user-status { font-size: 12px; color: #8b9cb0; }
+  .user-status.online { color: #4caf50; }
+
+  .chat-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #0e1621;
+  }
+  .chat-header {
+    background: #17212b;
+    padding: 14px 20px;
+    border-bottom: 1px solid #0e1621;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .chat-header .user-avatar { width: 36px; height: 36px; font-size: 14px; }
+  .chat-header-info { flex: 1; }
+  .chat-header-name { font-weight: 600; }
+  .chat-header-status { font-size: 12px; color: #8b9cb0; }
+  .chat-header-status.typing { color: #4caf50; }
+
+  .no-chat {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #8b9cb0;
+    font-size: 16px;
+  }
+
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .message {
+    max-width: 70%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.4;
+    word-wrap: break-word;
+    animation: pop 0.2s ease-out;
+  }
+  @keyframes pop {
+    from { transform: scale(0.9); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+  .message.me {
+    align-self: flex-end;
+    background: #2b5278;
+    border-bottom-right-radius: 4px;
+  }
+  .message.them {
+    align-self: flex-start;
+    background: #182533;
+    border-bottom-left-radius: 4px;
+  }
+  .message .time {
+    font-size: 11px;
+    color: #8b9cb0;
+    margin-top: 4px;
+    display: block;
+  }
+  .message .file-link {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 8px 12px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 8px;
+    text-decoration: none;
+    color: #667eea;
+    font-size: 13px;
+  }
+  .message .file-link:hover { background: rgba(255,255,255,0.15); }
+  .message audio {
+    margin-top: 6px;
+    max-width: 250px;
+    height: 36px;
+  }
+  .message .gif-container {
+    margin-top: 6px;
+  }
+  .message .gif-container img {
+    max-width: 200px;
+    border-radius: 8px;
+  }
+
+  .typing-indicator {
+    align-self: flex-start;
+    padding: 10px 14px;
+    background: #182533;
+    border-radius: 12px;
+    font-size: 13px;
+    color: #8b9cb0;
+    display: none;
+  }
+  .typing-indicator.active { display: block; }
+
+  .input-area {
+    background: #17212b;
+    padding: 12px 16px;
+    border-top: 1px solid #0e1621;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .input-btn {
+    background: none;
+    border: none;
+    color: #8b9cb0;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    transition: background 0.2s;
+  }
+  .input-btn:hover { background: #202b36; }
+  .input-btn.recording { color: #ff4444; animation: pulse 1s infinite; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .input-area input[type="text"] {
+    flex: 1;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 20px;
+    background: #242f3d;
+    color: #fff;
+    font-size: 14px;
+    outline: none;
+  }
+  .send-btn {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    border: none;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 18px;
+    cursor: pointer;
+    transition: transform 0.1s;
+  }
+  .send-btn:hover { transform: scale(1.05); }
+  .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Модальные окна */
+  .modal {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7);
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+  .modal.active { display: flex; }
+  .modal-content {
+    background: #17212b;
+    padding: 30px;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 400px;
+  }
+  .modal-content h3 { margin-bottom: 20px; }
+  .modal-content input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #3a4a5c;
+    border-radius: 10px;
+    background: #242f3d;
+    color: #fff;
+    font-size: 14px;
+    margin-bottom: 15px;
+  }
+  .modal-content button {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 10px;
+  }
+  .modal-content .cancel-btn {
+    background: transparent;
+    border: 1px solid #3a4a5c;
+  }
+
+  /* GIF поиск */
+  .gif-search {
+    display: none;
+    position: absolute;
+    bottom: 70px;
+    left: 16px;
+    right: 16px;
+    background: #17212b;
+    border: 1px solid #3a4a5c;
+    border-radius: 12px;
+    padding: 12px;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+  .gif-search.active { display: block; }
+  .gif-search input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #3a4a5c;
+    border-radius: 8px;
+    background: #242f3d;
+    color: #fff;
+    margin-bottom: 10px;
+  }
+  .gif-results {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .gif-results img {
+    width: 100%;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: transform 0.1s;
+  }
+  .gif-results img:hover { transform: scale(1.05); }
+
+  @media (max-width: 768px) {
+    .sidebar { width: 100%; }
+    .chat-area { display: none; }
+    .chat-area.active { display: flex; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Экран входа -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-box">
+    <h1>💬 Мессенджер</h1>
+    <input type="text" id="usernameInput" placeholder="Имя пользователя" maxlength="20">
+    <input type="password" id="passwordInput" placeholder="Пароль">
+    <button id="loginBtn" onclick="handleAuth()">Войти</button>
+    <div class="error-msg" id="errorMsg"></div>
+    <div class="toggle-mode">
+      <span id="toggleText">Нет аккаунта?</span>
+      <a onclick="toggleMode()" id="toggleLink">Зарегистрироваться</a>
+    </div>
+  </div>
+</div>
+
+<!-- Основной интерфейс -->
+<div class="app" id="app">
+  <div class="header">
+    <h2>💬 Мессенджер</h2>
+    <div>
+      <span class="my-name" id="myName"></span>
+      <button class="header-btn danger" onclick="showDeleteModal()">Удалить аккаунт</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="sidebar">
+      <div class="sidebar-header">Пользователи онлайн</div>
+      <div class="users-list" id="usersList"></div>
+    </div>
+
+    <div class="chat-area" id="chatArea">
+      <div class="no-chat" id="noChat">Выбери пользователя для начала чата</div>
+      
+      <div class="chat-header" id="chatHeader" style="display:none;">
+        <div class="user-avatar" id="chatAvatar"></div>
+        <div class="chat-header-info">
+          <div class="chat-header-name" id="chatName"></div>
+          <div class="chat-header-status" id="chatStatus">онлайн</div>
+        </div>
+      </div>
+
+      <div class="messages" id="messages" style="display:none;"></div>
+      <div class="typing-indicator" id="typingIndicator">печатает...</div>
+
+      <div class="input-area" id="inputArea" style="display:none; position: relative;">
+        <input type="file" id="fileInput" style="display:none;" onchange="uploadFile()">
+        <button class="input-btn" onclick="document.getElementById('fileInput').click()" title="Файл">📎</button>
+        <button class="input-btn" id="micBtn" onclick="toggleRecording()" title="Голосовое">🎤</button>
+        <button class="input-btn" onclick="toggleGifSearch()" title="GIF">GIF</button>
+        <input type="text" id="msgInput" placeholder="Сообщение..." onkeypress="handleKeyPress(event)" oninput="handleTyping()">
+        <button class="send-btn" onclick="sendMessage()">➤</button>
+      </div>
+
+      <div class="gif-search" id="gifSearch">
+        <input type="text" id="gifInput" placeholder="Поиск GIF..." onkeypress="if(event.key==='Enter')searchGifs()">
+        <div class="gif-results" id="gifResults"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Модальное окно удаления аккаунта -->
+<div class="modal" id="deleteModal">
+  <div class="modal-content">
+    <h3>⚠️ Удалить аккаунт?</h3>
+    <p style="color: #8b9cb0; margin-bottom: 15px; font-size: 14px;">Все сообщения будут удалены безвозвратно!</p>
+    <input type="password" id="deletePassword" placeholder="Введи пароль для подтверждения">
+    <button onclick="deleteAccount()">Удалить</button>
+    <button class="cancel-btn" onclick="closeDeleteModal()">Отмена</button>
+  </div>
+</div>
+
+<script>
+  const socket = io();
+  let currentUser = null;
+  let selectedUser = null;
+  let isLoginMode = true;
+  let typingTimeout = null;
+  let mediaRecorder = null;
+  let audioChunks = [];
+  let isRecording = false;
+
+  // Переключение вход/регистрация
+  function toggleMode() {
+    isLoginMode = !isLoginMode;
+    document.getElementById('loginBtn').textContent = isLoginMode ? 'Войти' : 'Зарегистрироваться';
+    document.getElementById('toggleText').textContent = isLoginMode ? 'Нет аккаунта?' : 'Уже есть аккаунт?';
+    document.getElementById('toggleLink').textContent = isLoginMode ? 'Зарегистрироваться' : 'Войти';
+    document.getElementById('errorMsg').textContent = '';
+  }
+
+  // Авторизация
+  async function handleAuth() {
+    const username = document.getElementById('usernameInput').value.trim();
+    const password = document.getElementById('passwordInput').value;
+    
+    if (!username || !password) {
+      document.getElementById('errorMsg').textContent = 'Заполни все поля';
+      return;
+    }
+
+    const btn = document.getElementById('loginBtn');
+    btn.disabled = true;
+    btn.textContent = 'Подключение...';
+
+    const event = isLoginMode ? 'login' : 'register';
+    socket.emit(event, { username, password }, (response) => {
+      if (response.success) {
+        currentUser = username;
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('app').classList.add('active');
+        document.getElementById('myName').textContent = username;
+      } else {
+        document.getElementById('errorMsg').textContent = response.error;
+        btn.disabled = false;
+        btn.textContent = isLoginMode ? 'Войти' : 'Зарегистрироваться';
+      }
+    });
+  }
+
+  document.getElementById('usernameInput').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') handleAuth();
+  });
+  document.getElementById('passwordInput').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') handleAuth();
+  });
+
+  // Список пользователей
+  socket.on('users-online', (users) => {
+    const list = document.getElementById('usersList');
+    list.innerHTML = '';
+    users.forEach(user => {
+      if (user === currentUser) return;
+      const div = document.createElement('div');
+      div.className = 'user-item' + (selectedUser === user ? ' active' : '');
+      div.innerHTML = `
+        <div class="user-avatar">${user[0].toUpperCase()}</div>
+        <div class="user-info">
+          <div class="user-name">${user}</div>
+          <div class="user-status online">онлайн</div>
+        </div>
+      `;
+      div.onclick = (e) => selectUser(user, e.currentTarget);
+      list.appendChild(div);
+    });
+  });
+
+  function selectUser(user, element) {
+    selectedUser = user;
+    document.getElementById('noChat').style.display = 'none';
+    document.getElementById('chatHeader').style.display = 'flex';
+    document.getElementById('messages').style.display = 'flex';
+    document.getElementById('inputArea').style.display = 'flex';
+    document.getElementById('chatName').textContent = user;
+    document.getElementById('chatAvatar').textContent = user[0].toUpperCase();
+    document.getElementById('chatStatus').textContent = 'онлайн';
+    document.getElementById('chatStatus').className = 'chat-header-status online';
+
+    document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
+    if (element) element.classList.add('active');
+
+    socket.emit('load-history', user, (messages) => {
+      const messagesEl = document.getElementById('messages');
+      messagesEl.innerHTML = '';
+      messages.forEach(msg => {
+        addMessage(msg.from, msg.text, msg.fileUrl, msg.fileName, msg.fileType, msg.duration, msg.createdAt);
+      });
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    });
+  }
+
+  function sendMessage() {
+    const input = document.getElementById('msgInput');
+    const text = input.value.trim();
+    if (!text || !selectedUser) return;
+
+    socket.emit('send-message', { to: selectedUser, text });
+    input.value = '';
+    socket.emit('stop-typing', selectedUser);
+  }
+
+  function handleKeyPress(e) {
+    if (e.key === 'Enter') sendMessage();
+  }
+
+  function handleTyping() {
+    if (!selectedUser) return;
+    socket.emit('typing', selectedUser);
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => {
+      socket.emit('stop-typing', selectedUser);
+    }, 2000);
+  }
+
+  socket.on('user-typing', (user) => {
+    if (selectedUser === user) {
+      document.getElementById('typingIndicator').classList.add('active');
+      document.getElementById('chatStatus').textContent = 'печатает...';
+      document.getElementById('chatStatus').className = 'chat-header-status typing';
+    }
+  });
+
+  socket.on('user-stop-typing', (user) => {
+    if (selectedUser === user) {
+      document.getElementById('typingIndicator').classList.remove('active');
+      document.getElementById('chatStatus').textContent = 'онлайн';
+      document.getElementById('chatStatus').className = 'chat-header-status online';
+    }
+  });
+
+  socket.on('new-message', (data) => {
+    if (selectedUser === data.from) {
+      addMessage(data.from, data.text, data.fileUrl, data.fileName, data.fileType, data.duration, data.time);
+      document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+    }
+    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+      new Notification('Новое сообщение', { body: `${data.from}: ${data.text || '📎 Файл'}` });
+    }
+  });
+
+  socket.on('message-sent', (data) => {
+    if (selectedUser === data.to) {
+      addMessage(currentUser, data.text, data.fileUrl, data.fileName, data.fileType, data.duration, data.time);
+      document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+    }
+  });
+
+  function addMessage(from, text, fileUrl, fileName, fileType, duration, time) {
+    const messagesEl = document.getElementById('messages');
+    const div = document.createElement('div');
+    div.className = 'message ' + (from === currentUser ? 'me' : 'them');
+    
+    let content = '';
+    if (text) content += escapeHtml(text);
+    
+    if (fileUrl) {
+      if (fileType && fileType.startsWith('audio/')) {
+        content += `<audio controls src="${fileUrl}"></audio>`;
+        if (duration) content += `<span class="time">⏱ ${duration}с</span>`;
+      } else if (fileType && fileType.startsWith('image/') && fileName && fileName.toLowerCase().endsWith('.gif')) {
+        content += `<div class="gif-container"><img src="${fileUrl}" alt="GIF"></div>`;
+      } else {
+        content += `<a href="${fileUrl}" target="_blank" class="file-link">📎 ${escapeHtml(fileName || 'Файл')}</a>`;
+      }
+    }
+    
+    content += `<span class="time">${formatTime(time)}</span>`;
+    div.innerHTML = content;
+    messagesEl.appendChild(div);
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function formatTime(isoString) {
+    const date = new Date(isoString);
+    return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // Загрузка файлов
+  async function uploadFile() {
+    const fileInput = document.getElementById('fileInput');
+    const file = fileInput.files[0];
+    if (!file || !selectedUser) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch('/upload', { method: 'POST', body: formData });
+      const data = await response.json();
+      if (data.url) {
+        socket.emit('send-message', {
+          to: selectedUser,
+          fileUrl: data.url,
+          fileName: data.name,
+          fileType: data.type
+        });
+      }
+    } catch (err) {
+      alert('Ошибка загрузки файла');
+    }
+    fileInput.value = '';
+  }
+
+  // Голосовые сообщения
+  async function toggleRecording() {
+    if (!selectedUser) return;
+
+    if (!isRecording) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = (e) => {
+          audioChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          const formData = new FormData();
+          formData.append('file', audioBlob, 'voice.webm');
+
+          const response = await fetch('/upload', { method: 'POST', body: formData });
+          const data = await response.json();
+          
+          if (data.url) {
+            const duration = Math.round(audioChunks.reduce((acc, chunk) => acc + chunk.size, 0) / 10000);
+            socket.emit('send-message', {
+              to: selectedUser,
+              fileUrl: data.url,
+              fileName: 'Голосовое сообщение',
+              fileType: 'audio/webm',
+              duration: duration || 1
+            });
+          }
+
+          stream.getTracks().forEach(track => track.stop());
+        };
+
+        mediaRecorder.start();
+        isRecording = true;
+        document.getElementById('micBtn').classList.add('recording');
+        document.getElementById('micBtn').textContent = '⏹';
+      } catch (err) {
+        alert('Нужен доступ к микрофону');
+      }
+    } else {
+      mediaRecorder.stop();
+      isRecording = false;
+      document.getElementById('micBtn').classList.remove('recording');
+      document.getElementById('micBtn').textContent = '🎤';
+    }
+  }
+
+  // GIF поиск (используем Giphy API)
+  function toggleGifSearch() {
+    const gifSearch = document.getElementById('gifSearch');
+    gifSearch.classList.toggle('active');
+    if (gifSearch.classList.contains('active')) {
+      document.getElementById('gifInput').focus();
+    }
+  }
+
+  async function searchGifs() {
+    const query = document.getElementById('gifInput').value.trim();
+    if (!query) return;
+
+    const results = document.getElementById('gifResults');
+    results.innerHTML = '<p style="color: #8b9cb0; grid-column: 1/-1;">Загрузка...</p>';
+
+    try {
+      const response = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=dc6zaTOxFJmzC&q=${encodeURIComponent(query)}&limit=9&rating=g`);
+      const data = await response.json();
+      
+      results.innerHTML = '';
+      data.data.forEach(gif => {
+        const img = document.createElement('img');
+        img.src = gif.images.fixed_height_small.url;
+        img.onclick = () => sendGif(gif.images.original.url, gif.title);
+        results.appendChild(img);
+      });
+    } catch (err) {
+      results.innerHTML = '<p style="color: #ff6b6b; grid-column: 1/-1;">Ошибка загрузки</p>';
+    }
+  }
+
+  function sendGif(url, title) {
+    if (!selectedUser) return;
+    socket.emit('send-message', {
+      to: selectedUser,
+      fileUrl: url,
+      fileName: title + '.gif',
+      fileType: 'image/gif'
+    });
+    toggleGifSearch();
+    document.getElementById('gifInput').value = '';
+  }
+
+  // Удаление аккаунта
+  function showDeleteModal() {
+    document.getElementById('deleteModal').classList.add('active');
+  }
+
+  function closeDeleteModal() {
+    document.getElementById('deleteModal').classList.remove('active');
+    document.getElementById('deletePassword').value = '';
+  }
+
+  function deleteAccount() {
+    const password = document.getElementById('deletePassword').value;
+    if (!password) {
+      alert('Введи пароль');
+      return;
+    }
+
+    socket.emit('delete-account', password, (response) => {
+      if (response.success) {
+        alert('Аккаунт удалён');
+        location.reload();
+      } else {
+        alert(response.error);
+      }
+    });
+  }
+
+  // Уведомления
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+</script>
+</body>
+</html>
